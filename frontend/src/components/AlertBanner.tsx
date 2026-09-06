@@ -25,6 +25,8 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
   }
 
   const isVeryHigh = riskLevel === 'VERY HIGH';
+  const safeFactors = Array.isArray(factors) && factors.length > 0 ? factors : ['Elevated moisture content detected in slope catchment area'];
+  const safeProb = typeof probability === 'number' ? Math.round(probability * 100) : 75;
 
   return (
     <div
@@ -56,16 +58,16 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
                   isVeryHigh ? 'bg-rose-600 text-white' : 'bg-orange-600 text-white'
                 }`}
               >
-                {riskLevel} ({Math.round(probability * 100)}%)
+                {riskLevel} ({safeProb}%)
               </span>
             </div>
 
             <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
-              Elevated geotechnical instability detected for: <strong className="text-slate-950 dark:text-white underline">{locationName}</strong>
+              Elevated geotechnical instability detected for: <strong className="text-slate-950 dark:text-white underline">{locationName || 'Monitored Region'}</strong>
             </p>
 
             <div className="flex flex-wrap gap-2 mb-2.5">
-              {factors.map((factor, idx) => (
+              {safeFactors.map((factor, idx) => (
                 <span
                   key={idx}
                   className="text-[11px] font-medium bg-white/70 dark:bg-slate-900/60 text-slate-800 dark:text-slate-200 px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700/60 flex items-center gap-1 shadow-sm"
@@ -76,7 +78,7 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
             </div>
 
             <div className="text-[11px] opacity-90 italic pt-2 border-t border-slate-300 dark:border-slate-700/50">
-              <strong>Official Disclaimer:</strong> {disclaimer}
+              <strong>Official Disclaimer:</strong> {disclaimer || 'Active geotechnical monitoring enabled.'}
             </div>
           </div>
         </div>

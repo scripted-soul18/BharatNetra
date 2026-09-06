@@ -3,6 +3,7 @@ import {
   LandslidePredictionResponse,
   RiskMapResponse,
   PredictionTimelineResponse,
+  TimelineHorizonItem,
   ModelMetricsResponse,
   SavedLocationItem,
   PredictionHistoryItem,
@@ -150,12 +151,37 @@ export async function predictLandslide(params: {
   const lat = params.latitude;
   const lon = params.longitude;
 
-  const isHimalayan = lat > 28.0 && lon > 74.0;
-  const isWesternGhats = lat > 8.0 && lat < 21.0 && lon > 73.0 && lon < 77.5;
+  const isHimalayanOrNepal = (lat >= 26.0 && lat <= 38.0 && lon >= 70.0 && lon <= 100.0);
+  const isAlps = (lat >= 44.0 && lat <= 48.0 && lon >= 5.0 && lon <= 16.0);
+  const isAndes = (lat >= -55.0 && lat <= 12.0 && lon >= -80.0 && lon <= -60.0);
+  const isJapan = (lat >= 30.0 && lat <= 46.0 && lon >= 128.0 && lon <= 146.0);
+  const isWesternGhats = (lat >= 8.0 && lat <= 21.0 && lon >= 73.0 && lon <= 77.5);
+  const isCascadesRockies = (lat >= 32.0 && lat <= 60.0 && lon >= -130.0 && lon <= -105.0);
 
-  const baseSlope = params.slope ?? (isHimalayan ? 28.5 : isWesternGhats ? 18.0 : 8.5);
-  const baseElevation = isHimalayan ? 2150 : isWesternGhats ? 680 : 350;
-  const rain24h = params.rainfall_24h ?? (isHimalayan ? 18.4 : isWesternGhats ? 14.2 : 2.0);
+  const baseSlope = params.slope ?? (
+    isHimalayanOrNepal ? 31.5 :
+    isAlps ? 27.0 :
+    isAndes ? 29.0 :
+    isJapan ? 24.5 :
+    isWesternGhats ? 19.5 :
+    isCascadesRockies ? 22.0 : 8.5
+  );
+
+  const baseElevation = (
+    isHimalayanOrNepal ? 2600 :
+    isAlps ? 1850 :
+    isAndes ? 2750 :
+    isJapan ? 1050 :
+    isWesternGhats ? 720 :
+    isCascadesRockies ? 1500 : 350
+  );
+
+  const rain24h = params.rainfall_24h ?? (
+    isHimalayanOrNepal ? 16.5 :
+    isWesternGhats ? 14.2 :
+    isJapan ? 12.0 :
+    isAlps ? 8.5 : 2.5
+  );
   const soilM = params.soil_moisture ?? 0.38;
 
   const logit = -3.2 + 0.052 * baseSlope + 0.042 * rain24h + 2.8 * soilM;
@@ -165,6 +191,18 @@ export async function predictLandslide(params: {
   if (prob >= 0.75) riskLevel = 'VERY HIGH';
   else if (prob >= 0.5) riskLevel = 'HIGH';
   else if (prob >= 0.25) riskLevel = 'MODERATE';
+
+  const soilTypeDesc = isHimalayanOrNepal
+    ? 'Himalayan Colluvium & Metamorphic Rock'
+    : isAlps
+    ? 'Alpine Flysch & Fractured Limestone'
+    : isAndes
+    ? 'Volcanic Ash & Andesite Scree'
+    : isJapan
+    ? 'Volcanic Pyroclastic & Weathered Granite'
+    : isWesternGhats
+    ? 'Laterite / Clayey Loam & Basalt Scree'
+    : 'Silty Clay / Alluvial Topsoil';
 
   return {
     latitude: lat,
@@ -214,8 +252,8 @@ export async function predictLandslide(params: {
       aspect: 145,
       plan_curvature: -0.01,
       profile_curvature: 0.02,
-      soil_type: isWesternGhats ? 'Laterite / Clayey Loam' : 'Silty Gravel / Mountain Sand',
-      land_cover: 'Deciduous Vegetation & Hill Slopes',
+      soil_type: soilTypeDesc,
+      land_cover: isHimalayanOrNepal ? 'Alpine Meadows & Steep Slopes' : isWesternGhats ? 'Deciduous Vegetation & Hill Slopes' : 'Vegetated Hill Terrain',
       geology_strength: 0.72,
       vegetation_density: 0.65,
       data_limitations: []
@@ -226,7 +264,7 @@ export async function predictLandslide(params: {
       rainfall_24h: rain24h,
       rainfall_7d: Math.round(rain24h * 3.2 * 10) / 10,
       wind_speed: 12,
-      description: 'Monsoon Light Rain / Overcast'
+      description: 'Regional Weather Active'
     }
   };
 }
@@ -248,42 +286,36 @@ export async function fetchRiskMap(
   } catch {}
 
   const gridPoints = [];
-  const step = (radiusKm / 111) * 0.4;
-  let highCount = 0;
-  let modCount = 0;
-  let lowCount = 0;
+  const baseLat = lat;
+  const baseLon = lon;
+  const step = (radiusKm / 111.32) / 2;
 
-  for (let dy = -2; dy <= 2; dy++) {
-    for (let dx = -2; dx <= 2; dx++) {
-      const pLat = lat + dy * step;
-      const pLon = lon + dx * step;
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -2; dy <= 2; dy++) {
+      const pLat = baseLat + dy * step;
+      const pLon = baseLon + dx * step;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const prob = Math.max(0.08, Math.min(0.85, 0.22 + dist * 0.06 + Math.sin(pLat * 10) * 0.1));
+      const isCenter = dist === 0;
 
-      let rLevel: RiskLevel = 'LOW';
-      if (prob >= 0.7) {
-        rLevel = 'VERY HIGH';
-        highCount++;
-      } else if (prob >= 0.45) {
-        rLevel = 'HIGH';
-        highCount++;
-      } else if (prob >= 0.22) {
-        rLevel = 'MODERATE';
-        modCount++;
-      } else {
-        lowCount++;
-      }
+      const pProb = Math.min(
+        Math.max(0.12 + (Math.sin(pLat * 10) * 0.2 + Math.cos(pLon * 10) * 0.2), 0.05),
+        0.92
+      );
+
+      let pLevel: RiskLevel = 'LOW';
+      if (pProb >= 0.75) pLevel = 'VERY HIGH';
+      else if (pProb >= 0.5) pLevel = 'HIGH';
+      else if (pProb >= 0.25) pLevel = 'MODERATE';
 
       gridPoints.push({
-        id: `grid-${dx}-${dy}`,
         latitude: Math.round(pLat * 10000) / 10000,
         longitude: Math.round(pLon * 10000) / 10000,
-        elevation: 650 + Math.round(dist * 80),
-        slope: 12 + Math.round(dist * 4),
-        rainfall_24h: 12,
+        elevation: 600 + Math.round(Math.abs(Math.sin(pLat * 5)) * 400),
+        slope: 12 + Math.round(Math.abs(Math.cos(pLon * 5)) * 18),
+        rainfall_24h: 12.5,
         soil_moisture: 0.35,
-        landslide_probability: Math.round(prob * 100) / 100,
-        risk_level: rLevel
+        landslide_probability: Math.round(pProb * 100) / 100,
+        risk_level: pLevel
       });
     }
   }
@@ -294,41 +326,51 @@ export async function fetchRiskMap(
     radius_km: radiusKm,
     grid_points: gridPoints,
     summary: {
-      high_risk_points: highCount,
-      moderate_risk_points: modCount,
-      low_risk_points: lowCount
+      total: gridPoints.length,
+      low: gridPoints.filter(p => p.risk_level === 'LOW').length,
+      moderate: gridPoints.filter(p => p.risk_level === 'MODERATE').length,
+      high: gridPoints.filter(p => p.risk_level === 'HIGH').length,
+      very_high: gridPoints.filter(p => p.risk_level === 'VERY HIGH').length
     }
   };
 }
 
 /**
- * 4. Fetch 72h Prediction Timeline
+ * 4. Fetch Timeline Forecast
  */
-export async function fetchTimeline(lat: number, lon: number): Promise<PredictionTimelineResponse> {
+export async function fetchTimeline(
+  lat: number,
+  lon: number
+): Promise<PredictionTimelineResponse> {
   try {
-    const res = await fetch(`${API_BASE}/timeline?latitude=${lat}&longitude=${lon}`, {
-      signal: AbortSignal.timeout(2000)
-    });
+    const res = await fetch(
+      `${API_BASE}/timeline?latitude=${lat}&longitude=${lon}`,
+      { signal: AbortSignal.timeout(2000) }
+    );
     if (res.ok) return await res.json();
   } catch {}
 
-  const now = Date.now();
-  const timeline = [0, 6, 12, 24, 48, 72].map((hoursAhead) => {
-    const prob = Math.min(0.85, Math.max(0.1, 0.18 + Math.sin(hoursAhead / 12) * 0.12));
+  const horizons = [1, 3, 6, 12, 24, 48, 72];
+  let accRain = 0;
+  const timeline: TimelineHorizonItem[] = horizons.map((hoursAhead) => {
+    const rainInterval = Math.max(0, Math.round((Math.sin(hoursAhead * 0.3) * 3 + 2) * 10) / 10);
+    accRain += rainInterval;
+    const prob = Math.min(Math.max(0.12 + accRain * 0.025, 0.08), 0.94);
+
     let rLevel: RiskLevel = 'LOW';
-    if (prob >= 0.7) rLevel = 'VERY HIGH';
-    else if (prob >= 0.45) rLevel = 'HIGH';
-    else if (prob >= 0.22) rLevel = 'MODERATE';
+    if (prob >= 0.75) rLevel = 'VERY HIGH';
+    else if (prob >= 0.5) rLevel = 'HIGH';
+    else if (prob >= 0.25) rLevel = 'MODERATE';
 
     return {
       time_offset: `+${hoursAhead}h`,
       hours_from_now: hoursAhead,
-      timestamp: new Date(now + hoursAhead * 3600000).toISOString(),
-      rainfall_mm: Math.round(hoursAhead * 0.4 * 10) / 10,
-      cumulative_rainfall_mm: Math.round(hoursAhead * 0.8 * 10) / 10,
-      temperature: 24 - Math.round(hoursAhead / 24),
+      timestamp: new Date(Date.now() + hoursAhead * 3600000).toISOString(),
+      rainfall_mm: rainInterval,
+      cumulative_rainfall_mm: Math.round(accRain * 10) / 10,
+      temperature: 24 - Math.round(hoursAhead / 18),
       humidity: 68 + Math.round(hoursAhead / 12),
-      soil_moisture: 0.35 + (hoursAhead / 72) * 0.05,
+      soil_moisture: Math.min(0.85, 0.38 + (hoursAhead / 72) * 0.2),
       landslide_probability: Math.round(prob * 100) / 100,
       risk_level: rLevel
     };
@@ -367,8 +409,25 @@ export async function searchLocations(query: string): Promise<any[]> {
     const res = await fetch(`${API_BASE}/location?q=${encodeURIComponent(query)}`, {
       signal: AbortSignal.timeout(1500)
     });
-    if (res.ok) return await res.json();
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
   } catch {}
+
+  // Fallback to direct high-speed Open-Meteo & Photon global geocoding
+  try {
+    const { searchGlobalLocations } = await import('../engine/GeocodingService');
+    const globalRes = await searchGlobalLocations(query);
+    return globalRes.map(item => ({
+      name: item.display_name || item.name,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      country: item.country,
+      state: item.state
+    }));
+  } catch {}
+
   return [];
 }
 

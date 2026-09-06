@@ -9,7 +9,9 @@
     --bg-surface: #ffffff;
     --text-primary: #0f172a;
     --text-secondary: #64748b;
-    --border-subtle: rgba(203, 213, 225, 0.8);
+    --border-subtle: rgba(226, 232, 240, 0.9);
+    --brand-green: #10b981;
+    --brand-green-dark: #059669;
   }
 
   .dark {
@@ -21,8 +23,14 @@
   }
 
   body {
-    @apply bg-slate-100 text-slate-900 font-sans antialiased min-h-screen selection:bg-blue-600 selection:text-white transition-colors duration-300;
+    @apply bg-slate-100 text-slate-900 font-sans antialiased min-h-screen selection:bg-emerald-600 selection:text-white transition-colors duration-300;
     background-color: #f1f5f9;
+    background-image: 
+      radial-gradient(#cbd5e1 0.75px, transparent 0.75px),
+      linear-gradient(135deg, #f8fafc 0%, #edf2f7 50%, #e2e8f0 100%);
+    background-size: 24px 24px, 100% 100%;
+    background-position: 0 0, center center;
+    background-attachment: fixed;
   }
 
   .dark body,
@@ -30,12 +38,11 @@
     @apply bg-slate-950 text-slate-100;
     background-color: #030712;
     background-image: 
-      linear-gradient(to bottom, rgba(3, 7, 18, 0.72) 0%, rgba(3, 7, 18, 0.88) 100%),
-      url('/space_earth_bg.jpg');
-    background-size: cover;
-    background-position: center top;
+      radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, #030712 0%, #070e1a 100%);
+    background-size: 24px 24px, 100% 100%;
+    background-position: 0 0, center center;
     background-attachment: fixed;
-    background-repeat: no-repeat;
   }
 }
 

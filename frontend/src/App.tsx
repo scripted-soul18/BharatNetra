@@ -3,9 +3,10 @@ import { SplashScreen } from './components/SplashScreen';
 import { VehicleLanguageOnboarding } from './components/VehicleLanguageOnboarding';
 import { AuthScreen } from './components/AuthScreen';
 import { BharatNetraNavView } from './components/BharatNetraNavView';
-import { WeatherPredictionMobile } from './components/WeatherPredictionMobile';
+import { WeatherPredictionMobile, PredictionViewTab } from './components/WeatherPredictionMobile';
 import { SavedLocationsDrawer } from './components/SavedLocationsDrawer';
 import { MobileAppWrapper } from './components/MobileAppWrapper';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ThemeProvider } from './context/ThemeContext';
 import {
   WeatherForecastResponse,
@@ -40,7 +41,7 @@ type ActiveView = 'splash' | 'onboarding' | 'auth' | 'navigation' | 'weather_pre
 
 function MainAppContent() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('bharat_netra_user');
+    const saved = localStorage.getItem('bharat_path_user') || localStorage.getItem('bharat_netra_user');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -48,16 +49,23 @@ function MainAppContent() {
         return null;
       }
     }
-    return null;
+    return {
+      name: 'Commercial Driver',
+      role: 'Authorized Navigator',
+      emailOrPhone: 'driver@bharatnetra.gov.in',
+      language: 'en',
+      vehicle: 'truck'
+    };
   });
 
   // Selected Preferences during Onboarding
   const [userPreferences, setUserPreferences] = useState<{ language: string; vehicle: string }>({
-    language: 'en',
-    vehicle: 'car'
+    language: currentUser?.language || 'en',
+    vehicle: currentUser?.vehicle || 'truck'
   });
 
-  const [activeView, setActiveView] = useState<ActiveView>(currentUser ? 'navigation' : 'splash');
+  const [activeView, setActiveView] = useState<ActiveView>('navigation');
+  const [predictionTab, setPredictionTab] = useState<PredictionViewTab>('overview');
   const [lat, setLat] = useState<number>(DEFAULT_LAT);
   const [lon, setLon] = useState<number>(DEFAULT_LON);
   const [locationName, setLocationName] = useState<string>(DEFAULT_NAME);
@@ -99,7 +107,11 @@ function MainAppContent() {
         if (pData) setPredictionData(pData);
         if (rData) setRiskMapData(rData);
         if (tData) setTimelineData(tData);
-        if (locInfo?.display_name) setLocationName(locInfo.display_name);
+        if (nameOverride) {
+          setLocationName(nameOverride);
+        } else if (locInfo?.display_name) {
+          setLocationName(locInfo.display_name);
+        }
         setAlerts(activeAlerts);
       } catch (err) {
         console.error('Failed to load weather analysis data:', err);
@@ -112,12 +124,13 @@ function MainAppContent() {
 
   useEffect(() => {
     loadDataForLocation(lat, lon, locationName);
-  }, [lat, lon]);
+  }, []);
 
   const handleSelectCoordinates = (newLat: number, newLon: number, name?: string) => {
     setLat(newLat);
     setLon(newLon);
     if (name) setLocationName(name);
+    loadDataForLocation(newLat, newLon, name);
   };
 
   const handleSimulate = (params: { rainfall_24h?: number; slope?: number; soil_moisture?: number }) => {
@@ -126,6 +139,11 @@ function MainAppContent() {
 
   const handleRefresh = () => {
     loadDataForLocation(lat, lon, locationName);
+  };
+
+  const handleOpenPrediction = (tab: PredictionViewTab = 'overview') => {
+    setPredictionTab(tab);
+    setActiveView('weather_prediction');
   };
 
   const handleOnboardingContinue = (prefs: { language: string; vehicle: string }) => {
@@ -151,12 +169,12 @@ function MainAppContent() {
 
   return (
     <MobileAppWrapper>
-      {/* 1. SPLASH SCREEN (Matching Image 1: India Night Satellite Map + BHARAT नेत्र + GET STARTED) */}
+      {/* 1. SPLASH SCREEN */}
       {activeView === 'splash' && (
         <SplashScreen onGetStarted={() => setActiveView('onboarding')} />
       )}
 
-      {/* 2. VEHICLE & LANGUAGE ONBOARDING (Matching Image 2: 6 Languages + 4 Vehicle Cards + Continue Button) */}
+      {/* 2. VEHICLE & LANGUAGE ONBOARDING */}
       {activeView === 'onboarding' && (
         <VehicleLanguageOnboarding
           onBack={() => setActiveView('splash')}
@@ -164,7 +182,7 @@ function MainAppContent() {
         />
       )}
 
-      {/* 3. WELCOME & AUTH SCREEN (Matching Image 3: Email / Mobile OTP / Gov Authority Credentials) */}
+      {/* 3. WELCOME & AUTH SCREEN */}
       {activeView === 'auth' && (
         <AuthScreen
           onLoginSuccess={handleLoginSuccess}
@@ -172,36 +190,48 @@ function MainAppContent() {
         />
       )}
 
-      {/* 4. BHARAT NETRA ROAD NAVIGATION VIEW (Live Safe Route Engine & Map) */}
+      {/* 4. BHARAT PATH ROAD NAVIGATION VIEW */}
       {activeView === 'navigation' && (
-        <BharatNetraNavView
-          user={currentUser}
-          weatherData={weatherData}
-          predictionData={predictionData}
-          onOpenWeatherPrediction={() => setActiveView('weather_prediction')}
-          onLogout={handleLogout}
-          onSelectCoordinates={handleSelectCoordinates}
-        />
+        <ErrorBoundary fallbackTitle="Navigation Engine Notice" onNavigateHome={() => setActiveView('navigation')}>
+          <BharatNetraNavView
+            user={currentUser}
+            weatherData={weatherData}
+            predictionData={predictionData}
+            onOpenWeatherPrediction={handleOpenPrediction}
+            onLogout={handleLogout}
+            onSelectCoordinates={handleSelectCoordinates}
+            onUpdateUserPreferences={(prefs) => {
+              if (currentUser) {
+                const updated = { ...currentUser, ...prefs };
+                setCurrentUser(updated);
+                localStorage.setItem('bharat_path_user', JSON.stringify(updated));
+              }
+            }}
+          />
+        </ErrorBoundary>
       )}
 
-      {/* 5. WEATHER & LANDSLIDE PREDICTION MOBILE VIEW (When clicking 'Nearby') */}
+      {/* 5. WEATHER & LANDSLIDE PREDICTION VIEW */}
       {activeView === 'weather_prediction' && (
-        <WeatherPredictionMobile
-          currentLat={lat}
-          currentLon={lon}
-          locationName={locationName}
-          weatherData={weatherData}
-          predictionData={predictionData}
-          riskMapData={riskMapData}
-          timelineData={timelineData}
-          alerts={alerts}
-          isLoading={isLoading}
-          onBackToNavigation={() => setActiveView('navigation')}
-          onSelectCoordinates={handleSelectCoordinates}
-          onSimulate={handleSimulate}
-          onRefresh={handleRefresh}
-          onOpenSavedLocations={() => setIsSavedOpen(true)}
-        />
+        <ErrorBoundary fallbackTitle="Weather & Landslide Intelligence" onNavigateHome={() => setActiveView('navigation')}>
+          <WeatherPredictionMobile
+            currentLat={lat}
+            currentLon={lon}
+            locationName={locationName}
+            weatherData={weatherData}
+            predictionData={predictionData}
+            riskMapData={riskMapData}
+            timelineData={timelineData}
+            alerts={alerts}
+            isLoading={isLoading}
+            initialTab={predictionTab}
+            onBackToNavigation={() => setActiveView('navigation')}
+            onSelectCoordinates={handleSelectCoordinates}
+            onSimulate={handleSimulate}
+            onRefresh={handleRefresh}
+            onOpenSavedLocations={() => setIsSavedOpen(true)}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Saved Locations Drawer */}

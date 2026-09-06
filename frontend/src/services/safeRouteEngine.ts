@@ -40,6 +40,8 @@ export interface RouteOption {
   };
 }
 
+export type SafeRouteOption = RouteOption;
+
 export interface SafeRouteAnalysisResult {
   origin: string;
   destination: string;
