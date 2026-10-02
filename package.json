@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "weathergpt",
   "private": true,
   "version": "0.0.0",
@@ -25,5 +26,15 @@
     "@vitejs/plugin-react": "^6.0.4",
     "oxlint": "^1.75.0",
     "vite": "^8.2.0"
+=======
+  "name": "bharat-netra-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bharat Netra — Safe Road Navigation & Weather Hazard Prediction Platform",
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm install && npm run build",
+    "start": "python run.py"
+>>>>>>> bf84d3c157e4915da1b1d4a8419d002553a633c9
   }
 }
